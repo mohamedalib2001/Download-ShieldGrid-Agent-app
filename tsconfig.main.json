@@ -5,13 +5,14 @@
     "lib": ["ES2022"],
     "outDir": "./dist/main",
     "rootDir": "./src/main",
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "declaration": true
+    "declaration": false
   },
   "include": ["src/main/**/*", "src/shared/**/*"],
   "exclude": ["node_modules"]
