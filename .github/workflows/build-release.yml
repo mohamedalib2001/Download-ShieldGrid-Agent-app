@@ -14,14 +14,9 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            platform: win
-            artifact: ShieldGrid-Agent-*-Setup.exe
-          - os: macos-latest
-            platform: mac
-            artifact: ShieldGrid-Agent-*.dmg
           - os: ubuntu-latest
             platform: linux
             artifact: ShieldGrid-Agent-*.AppImage
