@@ -73,7 +73,7 @@ export interface ScanResult {
 
 export interface OptimizationAction {
   id: string;
-  type: 'startup' | 'service' | 'registry' | 'memory' | 'disk';
+  type: 'startup' | 'service' | 'registry' | 'memory' | 'disk' | 'logs';
   name: string;
   description: string;
   impact: 'low' | 'medium' | 'high';
