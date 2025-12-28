@@ -1,5 +1,7 @@
 declare module 'electron';
 declare module 'electron-log';
+declare module 'electron-updater';
+declare module 'electron-store';
 declare module 'axios';
 declare module 'systeminformation';
 declare module 'node-machine-id';
