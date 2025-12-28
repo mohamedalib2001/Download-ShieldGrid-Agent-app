@@ -1,0 +1,140 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact: ShieldGrid-Agent-*-Setup.exe
+          - os: macos-latest
+            platform: mac
+            artifact: ShieldGrid-Agent-*.dmg
+          - os: ubuntu-latest
+            platform: linux
+            artifact: ShieldGrid-Agent-*.AppImage
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build Electron app (Windows)
+        if: matrix.platform == 'win'
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Electron app (macOS)
+        if: matrix.platform == 'mac'
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CERTS }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+
+      - name: Build Electron app (Linux)
+        if: matrix.platform == 'linux'
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shieldgrid-${{ matrix.platform }}
+          path: release/${{ matrix.artifact }}
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: ShieldGrid Agent v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            release-artifacts/**/*
+          body: |
+            ## ShieldGrid Agent v${{ steps.version.outputs.VERSION }}
+            
+            ### Downloads
+            - **Windows**: ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}-Setup.exe
+            - **macOS**: ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}.dmg
+            - **Linux**: ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}.AppImage
+            
+            ### Installation
+            1. Download the appropriate installer for your platform
+            2. Run the installer and follow the on-screen instructions
+            3. Launch ShieldGrid Agent and enter your license key
+            
+            ### System Requirements
+            - **Windows**: Windows 10/11 (64-bit)
+            - **macOS**: macOS 11+ (Big Sur or later)
+            - **Linux**: Ubuntu 20.04+, Debian 11+, or Fedora 36+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Platform
+        if: success()
+        run: |
+          curl -X POST "${{ secrets.PLATFORM_API_URL }}/api/agents/releases/notify" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.PLATFORM_API_KEY }}" \
+            -d '{
+              "version": "${{ steps.version.outputs.VERSION }}",
+              "tag": "v${{ steps.version.outputs.VERSION }}",
+              "windowsUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}-Setup.exe",
+              "macosUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}.dmg",
+              "linuxUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/ShieldGrid-Agent-${{ steps.version.outputs.VERSION }}.AppImage",
+              "releaseNotes": "Release v${{ steps.version.outputs.VERSION }}"
+            }'
